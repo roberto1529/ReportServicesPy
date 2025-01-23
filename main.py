@@ -43,6 +43,10 @@ def generate_word(data):
         print(f"Error generando el archivo Word: {e}")
         return None
 
+def limpiarReportes():
+    if(os.path.exists(OUTPUT_PATH)):
+        shutil.rmtree(OUTPUT_PATH)
+    os.mkdir(OUTPUT_PATH)
 
 def main():
     """
@@ -61,12 +65,8 @@ def main():
         'empresa': 'Mi Empresa',
         'version': '1.0'
     }
-
-    if(os.path.exists(OUTPUT_PATH)):
-        shutil.rmtree(OUTPUT_PATH)
-    os.mkdir(OUTPUT_PATH)
-
-    # Paso 1: Generar el documento Word
+    limpiarReportes()
+    # Generar el documento Word
     generate_word(data)
 
 if __name__ == '__main__':
