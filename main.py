@@ -1,73 +1,104 @@
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 import os
 import shutil
 from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Mm
+import asyncpg
+from typing import List
+from docx2pdf import convert  # Nueva importación para conversión
 
 # Configuración de rutas
-WORD_TEMPLATE_PATH = './templates/word/templete_test.docx'
+WORD_TEMPLATE_PATH = './templates/word/factura.docx'
 OUTPUT_PATH = './outputs'
-LOGO_PATH = './templates/img/logo.png'
+LOGO_PATH = './templates/img/Logo_Letras.png'
 
-def generate_word(data):
-    """
-    Esta función genera un archivo Word a partir de una plantilla y los datos proporcionados.
-    """
-    try:
-        # Cargar la plantilla de Word
-        doc = DocxTemplate(WORD_TEMPLATE_PATH)
+app = FastAPI()
 
-        # Rellenar la plantilla con los datos
-        context = {
-            'Nombre': data['Nombre'],
-            'Apellido': data['Apellido'],
-            'nombre': data['nombre'],
-            'apellido': data['apellido'],
-            'city': data['city'],
-            'age': data['age'],
-            'cuerpoCarta': data['cuerpoCarta'],
-            'logo': InlineImage(doc, LOGO_PATH, width=Mm(40)),  # Ajusta el tamaño del logo
-            'empresa': data['empresa'],
-            'version': data['version']
-        }
+# Modelo de datos para la petición
+class Producto(BaseModel):
+    descripcion: str
+    cantidad: int
+    costo_unitario: float
+    costo_total: float
 
-        # Renderizar el documento con los datos
-        doc.render(context)
+class DocumentData(BaseModel):
+    cliente: str
+    direc: str
+    tell: str
+    id: str
+    fecha: str
+    subtotal: float
+    iva: float
+    total: float
+    productos: List[Producto]
 
-        # Guardar el archivo Word generado
-        word_output_path = os.path.join(OUTPUT_PATH, 'documento_generado.docx')
-        doc.save(word_output_path)
-        print(f"Documento Word generado: {word_output_path}")
-        
-        return word_output_path
-    except Exception as e:
-        print(f"Error generando el archivo Word: {e}")
-        return None
-
-def limpiarReportes():
-    if(os.path.exists(OUTPUT_PATH)):
+# Función para limpiar reportes
+def limpiar_reportes():
+    if os.path.exists(OUTPUT_PATH):
         shutil.rmtree(OUTPUT_PATH)
     os.mkdir(OUTPUT_PATH)
 
-def main():
-    """
-    Función principal para generar el documento Word y luego convertirlo a PDF.
-    """
-    # Datos para llenar la plantilla
-    data = {
-        'Nombre': 'Juan',
-        'Apellido': 'Pérez',
-        'nombre': 'Juan',
-        'apellido': 'Pérez',
-        'city': 'Ciudad de México',
-        'age': 30,
-        'cuerpoCarta': 'Lorem Ipsum es simplemente el texto de relleno...',
-        'logo': LOGO_PATH,  # Ruta del logo
-        'empresa': 'Mi Empresa',
-        'version': '1.0'
-    }
-    limpiarReportes()
-    # Generar el documento Word
-    generate_word(data)
+# Función para convertir Word a PDF
+def convertir_a_pdf(word_path):
+    pdf_path = word_path.replace(".docx", ".pdf")
+    try:
+        convert(word_path, pdf_path)  # Convierte usando docx2pdf
+        return pdf_path
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al convertir a PDF: {str(e)}")
 
-if __name__ == '__main__':
-    main()
+# Función para generar el documento Word
+def generate_word(data: DocumentData):
+    try:
+        doc = DocxTemplate(WORD_TEMPLATE_PATH)
+        context = data.dict()
+        context['logo'] = InlineImage(doc, LOGO_PATH, width=Mm(40))
+
+        # Renderizar la plantilla con la tabla dinámica
+        doc.render(context)
+
+        # Guardar el documento final en Word
+        word_output_path = os.path.join(OUTPUT_PATH, 'factura_generada.docx')
+        doc.save(word_output_path)
+
+        # Convertir a PDF
+        pdf_output_path = convertir_a_pdf(word_output_path)
+
+        return {"message": "Documento generado correctamente", "word_path": word_output_path, "pdf_path": pdf_output_path}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Endpoint para generar el documento Word y PDF con datos temporales
+@app.get("/generate-word")
+async def generate_word_endpoint():
+    limpiar_reportes()
+    data = DocumentData(
+        cliente="Juan Pérez",
+        direc="Av. Reforma 123, CDMX",
+        tell="555-123-4567",
+        id="COT-20240325",
+        fecha="2025-03-25",
+        subtotal=5000.00,
+        iva=800.00,
+        total=5800.00,
+        productos=[
+            Producto(descripcion="Cámara de seguridad IP 1080p", cantidad=2, costo_unitario=1200.00, costo_total=2400.00),
+            Producto(descripcion="DVR de 4 canales", cantidad=1, costo_unitario=2000.00, costo_total=2000.00),
+            Producto(descripcion="Fuente de alimentación 12V 5A", cantidad=1, costo_unitario=600.00, costo_total=600.00)
+        ]
+    )
+    return generate_word(data)
+
+# Conexión a PostgreSQL
+async def connect_db():
+    return await asyncpg.connect(DATABASE_URL)
+
+@app.get("/test-db")
+async def test_db():
+    try:
+        conn = await connect_db()
+        await conn.close()
+        return {"message": "Conexión a la base de datos exitosa"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
