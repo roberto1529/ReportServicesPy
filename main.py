@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 import os
 import shutil
@@ -6,16 +6,36 @@ from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Mm
 import asyncpg
 from typing import List
-from docx2pdf import convert  # Nueva importación para conversión
-
+from docx2pdf import convert
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+from fastapi.middleware.cors import CORSMiddleware
 # Configuración de rutas
 WORD_TEMPLATE_PATH = './templates/word/factura.docx'
 OUTPUT_PATH = './outputs'
 LOGO_PATH = './templates/img/Logo_Letras.png'
+DATABASE_URL = "postgresql://admin:Techniza**@158.220.83.8:5432/postgres"
+
+# Configuración de correo con Zoho Mail
+SMTP_SERVER = "smtp.zoho.com"
+SMTP_PORT = 587
+SMTP_USER = "onecore_mail@zohomail.com"
+SMTP_PASSWORD = "Onecore2025**"
 
 app = FastAPI()
 
-# Modelo de datos para la petición
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Permite cualquier origen
+    allow_credentials=True,
+    allow_methods=["*"],  # Permite todos los métodos (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],  # Permite todos los headers
+)
+
+# Modelos de datos
 class Producto(BaseModel):
     descripcion: str
     cantidad: int
@@ -43,7 +63,7 @@ def limpiar_reportes():
 def convertir_a_pdf(word_path):
     pdf_path = word_path.replace(".docx", ".pdf")
     try:
-        convert(word_path, pdf_path)  # Convierte usando docx2pdf
+        convert(word_path, pdf_path)
         return pdf_path
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al convertir a PDF: {str(e)}")
@@ -55,50 +75,120 @@ def generate_word(data: DocumentData):
         context = data.dict()
         context['logo'] = InlineImage(doc, LOGO_PATH, width=Mm(40))
 
-        # Renderizar la plantilla con la tabla dinámica
         doc.render(context)
-
-        # Guardar el documento final en Word
         word_output_path = os.path.join(OUTPUT_PATH, 'factura_generada.docx')
         doc.save(word_output_path)
 
-        # Convertir a PDF
         pdf_output_path = convertir_a_pdf(word_output_path)
-
-        return {"message": "Documento generado correctamente", "word_path": word_output_path, "pdf_path": pdf_output_path}
+        return pdf_output_path
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Endpoint para generar el documento Word y PDF con datos temporales
-@app.get("/generate-word")
-async def generate_word_endpoint():
-    limpiar_reportes()
-    data = DocumentData(
-        cliente="Juan Pérez",
-        direc="Av. Reforma 123, CDMX",
-        tell="555-123-4567",
-        id="COT-20240325",
-        fecha="2025-03-25",
-        subtotal=5000.00,
-        iva=800.00,
-        total=5800.00,
-        productos=[
-            Producto(descripcion="Cámara de seguridad IP 1080p", cantidad=2, costo_unitario=1200.00, costo_total=2400.00),
-            Producto(descripcion="DVR de 4 canales", cantidad=1, costo_unitario=2000.00, costo_total=2000.00),
-            Producto(descripcion="Fuente de alimentación 12V 5A", cantidad=1, costo_unitario=600.00, costo_total=600.00)
-        ]
-    )
-    return generate_word(data)
-
-# Conexión a PostgreSQL
+# Función para conectar a PostgreSQL
 async def connect_db():
     return await asyncpg.connect(DATABASE_URL)
 
-@app.get("/test-db")
-async def test_db():
+# Función para obtener datos de la factura
+async def datos_fact(id: int):
     try:
         conn = await connect_db()
+
+        # Primera consulta: Datos de la factura
+        query1 = """
+            SELECT fm.id, fc.subtotal, fc.iva, fc.total, uc.nombre AS cliente, uc.correo, 
+                TO_CHAR((CURRENT_DATE + fm.fecha_reg)::timestamp, 'YYYY-MM-DD HH24:MI:SS') AS fecha_fact
+            FROM fact_maestro fm 
+            JOIN fact_venta_costo fc ON fc.id_factura = fm.id 
+            JOIN usu_cliente uc ON uc.id = fm.id_cliente
+            WHERE fm.id = $1
+        """
+
+        # Segunda consulta: Detalles de la factura
+        query2 = """
+            SELECT fi.id_factura, p.descripcion, fi.cantidad, 
+                   CAST(p.venta AS NUMERIC) AS costo_unitario, 
+                   (CAST(p.venta AS NUMERIC) * fi.cantidad) AS costo_total
+            FROM fact_venta_item fi
+            JOIN producto p ON p.id = fi.id_producto
+            WHERE fi.id_factura = $1
+        """
+
+        result1 = await conn.fetchrow(query1, id)
+        result2 = await conn.fetch(query2, id)
         await conn.close()
-        return {"message": "Conexión a la base de datos exitosa"}
+
+        if not result1:
+            raise HTTPException(status_code=404, detail="Factura no encontrada")
+
+        return {
+            "factura": dict(result1),
+            "detalles": [dict(row) for row in result2]
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# Función para enviar correo con PDF adjunto
+def enviar_correo(destinatario, archivo_adjunto):
+    try:
+        print(f"Enviando correo a {destinatario} con adjunto {archivo_adjunto}")
+
+        msg = MIMEMultipart()
+        msg['From'] = SMTP_USER
+        msg['To'] = destinatario
+        msg['Subject'] = "Factura - Techniza"
+
+        mensaje = "Hola, te hacemos envío de tu factura - Techniza."
+        msg.attach(MIMEText(mensaje, 'plain'))
+
+        with open(archivo_adjunto, "rb") as attachment:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(attachment.read())
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", f"attachment; filename={archivo_adjunto.split('/')[-1]}")
+            msg.attach(part)
+
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.sendmail(SMTP_USER, destinatario, msg.as_string())
+        server.quit()
+
+        print("Correo enviado correctamente")
+        return {"message": f"Correo enviado a {destinatario}"}
+    except Exception as e:
+        print(f"Error al enviar correo: {str(e)}")
+        return {"error": f"Error al enviar correo: {str(e)}"}
+
+# Endpoint para generar el documento y enviarlo por correo
+@app.get("/generate-fact/{id}")
+async def generate_fact_endpoint(id: int):
+    limpiar_reportes()
+
+    factura_data = await datos_fact(id)
+    factura = factura_data["factura"]
+    detalles = factura_data["detalles"]
+
+    data = DocumentData(
+        cliente=factura["cliente"],
+        direc="Dirección del cliente",  # Puedes agregar la dirección si existe en la DB
+        tell="Teléfono del cliente",    # Puedes agregar el teléfono si existe en la DB
+        id=f"FACT-{factura['id']}",
+        fecha=factura["fecha_fact"],
+        subtotal=factura["subtotal"],
+        iva=factura["iva"],
+        total=factura["total"],
+        productos=[Producto(**item) for item in detalles]
+    )
+
+    pdf_path = generate_word(data)
+
+    # Enviar correo
+    email_result = enviar_correo(factura["correo"], pdf_path)
+
+    # Enviar el PDF como respuesta al frontend
+    with open(pdf_path, "rb") as pdf_file:
+        pdf_bytes = pdf_file.read()
+
+    return Response(content=pdf_bytes, media_type="application/pdf", headers={
+        "Content-Disposition": f"attachment; filename=factura_{id}.pdf"
+    })
