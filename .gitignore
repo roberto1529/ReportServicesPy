@@ -1,1 +1,14 @@
-./*venv
+# Directorios virtuales de entorno
+.venv
+
+# Archivos compilados de Python
+__pycache__/
+
+outputs/
+
+# Archivos de caché
+.cache/
+.pytest_cache/
+
+# Archivos de configuración local
+local.settings.json
