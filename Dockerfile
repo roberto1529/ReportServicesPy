@@ -1,17 +1,31 @@
-# Usa la imagen oficial de Python
-FROM python:3.11
+FROM python:3.9-slim
 
-# Establece el directorio de trabajo dentro del contenedor
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    libreoffice \
+    libreoffice-writer \
+    fonts-liberation \
+    fonts-dejavu \
+    fonts-freefont-ttf \
+    && rm -rf /var/lib/apt/lists/*
+
+# Crear directorio para la aplicación
 WORKDIR /app
 
-# Copia los archivos del proyecto al contenedor
-COPY . /app
+# Copiar requirements primero para caché
+COPY requirements.txt .
 
-# Instala las dependencias desde requirements.txt
+# Instalar dependencias de Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expone el puerto donde correrá la API
+# Copiar el resto de la aplicación
+COPY . .
+
+# Crear directorios necesarios
+RUN mkdir -p /app/templates/word /app/templates/img /app/outputs
+
+# Puerto expuesto
 EXPOSE 8000
 
-# Comando para ejecutar la aplicación con Uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Comando para ejecutar la aplicación
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
