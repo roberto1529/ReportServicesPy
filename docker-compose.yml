@@ -6,8 +6,13 @@ services:
     container_name: fastapi_service
     volumes:
       - .:/app
+      - /etc/letsencrypt/live/admin.techniza.mx/fullchain.pem:/app/certs/fullchain.pem:ro
+      - /etc/letsencrypt/live/admin.techniza.mx/privkey.pem:/app/certs/privkey.pem:ro
     ports:
       - "8000:8000"
+      - "8443:8000"  # Puerto HTTPS alternativo
     environment:
       - PYTHONUNBUFFERED=1
+      - SSL_CERT_PATH=/app/certs/fullchain.pem
+      - SSL_KEY_PATH=/app/certs/privkey.pem
     restart: always
