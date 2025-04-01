@@ -6,8 +6,10 @@ services:
     container_name: fastapi_service
     volumes:
       - .:/app
+      - ./certs:/app/certs  # Montar certificados SSL
     ports:
       - "8000:8000"
+      - "443:8000"  # Puerto HTTPS adicional
     environment:
       - PYTHONUNBUFFERED=1
     restart: always

@@ -19,6 +19,9 @@ COPY requirements.txt .
 # Instalar dependencias de Python
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Instalar docx2pdf explícitamente por si acaso
+RUN pip install docx2pdf
+
 # Copiar el resto de la aplicación
 COPY . .
 
@@ -28,5 +31,5 @@ RUN mkdir -p /app/templates/word /app/templates/img /app/outputs /app/certs
 # Puerto expuesto
 EXPOSE 8000
 
-# Comando para ejecutar la aplicación
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Comando para ejecutar la aplicación con HTTPS
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--ssl-keyfile", "/app/certs/key.pem", "--ssl-certfile", "/app/certs/cert.pem"]
