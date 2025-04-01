@@ -6,13 +6,15 @@ from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Mm
 import asyncpg
 from typing import List
-from docx2pdf import convert
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from fastapi.middleware.cors import CORSMiddleware
+import subprocess
+from io import BytesIO
+
 # Configuración de rutas
 WORD_TEMPLATE_PATH = './templates/word/factura.docx'
 OUTPUT_PATH = './outputs'
@@ -29,10 +31,10 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permite cualquier origen
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Permite todos los métodos (GET, POST, PUT, DELETE, etc.)
-    allow_headers=["*"],  # Permite todos los headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Modelos de datos
@@ -59,12 +61,25 @@ def limpiar_reportes():
         shutil.rmtree(OUTPUT_PATH)
     os.mkdir(OUTPUT_PATH)
 
-# Función para convertir Word a PDF
+# Función para convertir Word a PDF (compatible con Linux)
 def convertir_a_pdf(word_path):
     pdf_path = word_path.replace(".docx", ".pdf")
     try:
-        convert(word_path, pdf_path)
+        # Usamos LibreOffice en Linux
+        result = subprocess.run([
+            'libreoffice', '--headless', '--convert-to', 'pdf',
+            '--outdir', os.path.dirname(pdf_path), word_path
+        ], capture_output=True, text=True, timeout=30)
+        
+        if result.returncode != 0:
+            raise Exception(f"Error en LibreOffice: {result.stderr}")
+        
+        if not os.path.exists(pdf_path):
+            raise Exception("El archivo PDF no se generó correctamente")
+            
         return pdf_path
+    except subprocess.TimeoutExpired:
+        raise Exception("Tiempo de espera agotado para la conversión PDF")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al convertir a PDF: {str(e)}")
 
@@ -93,7 +108,6 @@ async def datos_fact(id: int):
     try:
         conn = await connect_db()
 
-        # Primera consulta: Datos de la factura
         query1 = """
             SELECT fm.id, fc.subtotal, fc.iva, fc.total, uc.nombre AS cliente, uc.correo, 
                 TO_CHAR((CURRENT_DATE + fm.fecha_reg)::timestamp, 'YYYY-MM-DD HH24:MI:SS') AS fecha_fact
@@ -103,7 +117,6 @@ async def datos_fact(id: int):
             WHERE fm.id = $1
         """
 
-        # Segunda consulta: Detalles de la factura
         query2 = """
             SELECT fi.id_factura, p.descripcion, fi.cantidad, 
                    CAST(p.venta AS NUMERIC) AS costo_unitario, 
@@ -130,8 +143,6 @@ async def datos_fact(id: int):
 # Función para enviar correo con PDF adjunto
 def enviar_correo(destinatario, archivo_adjunto):
     try:
-        print(f"Enviando correo a {destinatario} con adjunto {archivo_adjunto}")
-
         msg = MIMEMultipart()
         msg['From'] = SMTP_USER
         msg['To'] = destinatario
@@ -153,10 +164,8 @@ def enviar_correo(destinatario, archivo_adjunto):
         server.sendmail(SMTP_USER, destinatario, msg.as_string())
         server.quit()
 
-        print("Correo enviado correctamente")
         return {"message": f"Correo enviado a {destinatario}"}
     except Exception as e:
-        print(f"Error al enviar correo: {str(e)}")
         return {"error": f"Error al enviar correo: {str(e)}"}
 
 # Endpoint para generar el documento y enviarlo por correo
@@ -170,8 +179,8 @@ async def generate_fact_endpoint(id: int):
 
     data = DocumentData(
         cliente=factura["cliente"],
-        direc="Dirección del cliente",  # Puedes agregar la dirección si existe en la DB
-        tell="Teléfono del cliente",    # Puedes agregar el teléfono si existe en la DB
+        direc="Dirección del cliente",
+        tell="Teléfono del cliente",
         id=f"FACT-{factura['id']}",
         fecha=factura["fecha_fact"],
         subtotal=factura["subtotal"],
