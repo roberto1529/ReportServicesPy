@@ -1,6 +1,6 @@
 FROM python:3.9-slim
 
-# Instalar dependencias del sistema
+# Instalar dependencias del sistema incluyendo LibreOffice y SSL
 RUN apt-get update && apt-get install -y \
     libreoffice \
     libreoffice-writer \
@@ -10,15 +10,23 @@ RUN apt-get update && apt-get install -y \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
+# Crear directorio para la aplicación
 WORKDIR /app
 
+# Copiar requirements primero para caché
 COPY requirements.txt .
+
+# Instalar dependencias de Python
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copiar el resto de la aplicación
 COPY . .
 
-RUN mkdir -p /app/{templates/word,templates/img,outputs,certs}
+# Crear directorios necesarios
+RUN mkdir -p /app/templates/word /app/templates/img /app/outputs /app/certs
 
+# Puerto expuesto
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--ssl-keyfile", "/app/certs/privkey.pem", "--ssl-certfile", "/app/certs/fullchain.pem"]
+# Comando para ejecutar la aplicación
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
