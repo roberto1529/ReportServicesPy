@@ -16,8 +16,9 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Instalar dependencias de Python
-RUN pip install --no-cache-dir -r requirements.txt
-
+# RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir fastapi uvicorn asyncpg docxtpl python-docx smtplib pydantic[dotenv] \
+    email encoders shutil subprocess asyncio
 # Copiar el resto de la aplicación
 COPY . .
 

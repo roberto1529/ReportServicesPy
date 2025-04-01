@@ -1,13 +1,9 @@
 version: '3.8'
 
 services:
-  fastapi_service:
+  fastapi_app:
     build: .
     container_name: fastapi_service
-    volumes:
-      - .:/app
     ports:
       - "8000:8000"
-    environment:
-      - PYTHONUNBUFFERED=1
     restart: always
