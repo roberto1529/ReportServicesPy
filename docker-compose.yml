@@ -1,9 +1,20 @@
-version: '3.8'
+# version: '3.8'
 
+# services:
+#   fastapi_app:
+#     build: .
+#     container_name: fastapi_service
+#     ports:
+#       - "8000:8000"
+#     restart: always
+version: "3.8"
 services:
   fastapi_app:
-    build: .
-    container_name: fastapi_service
+    build:
+      context: .
     ports:
-      - "8000:8000"
-    restart: always
+      - "8000:8000"  # Exponer el puerto 8000
+    volumes:
+      - /etc/letsencrypt/live/admin.techniza.mx/fullchain.pem:/app/certs/fullchain.pem:ro
+      - /etc/letsencrypt/live/admin.techniza.mx/privkey.pem:/app/certs/privkey.pem:ro
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--ssl-keyfile", "/app/certs/privkey.pem", "--ssl-certfile", "/app/certs/fullchain.pem"]
