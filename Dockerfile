@@ -7,23 +7,25 @@ RUN apt-get update && apt-get install -y \
     fonts-liberation \
     fonts-dejavu \
     fonts-freefont-ttf \
-    openssl \
     && rm -rf /var/lib/apt/lists/*
 
+# Crear directorio para la aplicación
 WORKDIR /app
 
-# Actualizar pip primero
-RUN pip install --upgrade pip
-
+# Copiar requirements primero para caché
 COPY requirements.txt .
 
-# Instalar dependencias
+# Instalar dependencias de Python
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copiar el resto de la aplicación
 COPY . .
 
-RUN mkdir -p /app/templates/word /app/templates/img /app/outputs /app/certs
+# Crear directorios necesarios
+RUN mkdir -p /app/templates/word /app/templates/img /app/outputs
 
+# Puerto expuesto
 EXPOSE 8000
 
+# Comando para ejecutar la aplicación
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
