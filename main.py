@@ -109,7 +109,7 @@ async def datos_fact(id: int):
         conn = await connect_db()
 
         query1 = """
-            SELECT fm.id, fc.subtotal, fc.iva, fc.total, uc.nombre AS cliente, uc.correo, 
+            SELECT LPAD(fm.id::text, 5, '0') AS id, fc.subtotal, fc.iva, fc.total, uc.nombre AS cliente, uc.correo, 
                 TO_CHAR((CURRENT_DATE + fm.fecha_reg)::timestamp, 'YYYY-MM-DD HH24:MI:SS') AS fecha_fact
             FROM fact_maestro fm 
             JOIN fact_venta_costo fc ON fc.id_factura = fm.id 
@@ -191,13 +191,17 @@ async def generate_fact_endpoint(id: int):
 
     pdf_path = generate_word(data)
 
-    # Enviar correo
-    email_result = enviar_correo(factura["correo"], pdf_path)
+    # Renombrar el PDF al código de factura
+    nuevo_pdf_path = os.path.join(OUTPUT_PATH, f"{factura['id']}.pdf")
+    os.rename(pdf_path, nuevo_pdf_path)
+
+    # Enviar correo con el nombre correcto
+    email_result = enviar_correo(factura["correo"], nuevo_pdf_path)
 
     # Enviar el PDF como respuesta al frontend
-    with open(pdf_path, "rb") as pdf_file:
+    with open(nuevo_pdf_path, "rb") as pdf_file:
         pdf_bytes = pdf_file.read()
 
     return Response(content=pdf_bytes, media_type="application/pdf", headers={
-        "Content-Disposition": f"attachment; filename=factura_{id}.pdf"
+        "Content-Disposition": f"attachment; filename={factura['id']}.pdf"
     })
