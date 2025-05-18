@@ -13,7 +13,6 @@ from email.mime.base import MIMEBase
 from email import encoders
 from fastapi.middleware.cors import CORSMiddleware
 import subprocess
-from io import BytesIO
 
 # Configuración de rutas
 WORD_TEMPLATE_PATH = './templates/word/factura.docx'
@@ -61,11 +60,10 @@ def limpiar_reportes():
         shutil.rmtree(OUTPUT_PATH)
     os.mkdir(OUTPUT_PATH)
 
-# Función para convertir Word a PDF (compatible con Linux)
+# Función para convertir Word a PDF
 def convertir_a_pdf(word_path):
     pdf_path = word_path.replace(".docx", ".pdf")
     try:
-        # Usamos LibreOffice en Linux
         result = subprocess.run([
             'libreoffice', '--headless', '--convert-to', 'pdf',
             '--outdir', os.path.dirname(pdf_path), word_path
@@ -88,8 +86,7 @@ def generate_word(data: DocumentData):
     try:
         doc = DocxTemplate(WORD_TEMPLATE_PATH)
         context = data.dict()
-        context['logo'] = InlineImage(doc, LOGO_PATH, width=Mm(40))
-
+        context['logo'] = InlineImage(doc, LOGO_PATH, width=Mm(70))
         doc.render(context)
         word_output_path = os.path.join(OUTPUT_PATH, 'factura_generada.docx')
         doc.save(word_output_path)
@@ -134,8 +131,8 @@ async def datos_fact(id: int):
             raise HTTPException(status_code=404, detail="Factura no encontrada")
 
         return {
-            "factura": dict(result1),
-            "detalles": [dict(row) for row in result2]
+            "factura": dict(result1.items()),
+            "detalles": [dict(row.items()) for row in result2]
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -155,7 +152,7 @@ def enviar_correo(destinatario, archivo_adjunto):
             part = MIMEBase("application", "octet-stream")
             part.set_payload(attachment.read())
             encoders.encode_base64(part)
-            part.add_header("Content-Disposition", f"attachment; filename={archivo_adjunto.split('/')[-1]}")
+            part.add_header("Content-Disposition", f"attachment; filename={os.path.basename(archivo_adjunto)}")
             msg.attach(part)
 
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
@@ -196,7 +193,7 @@ async def generate_fact_endpoint(id: int):
     os.rename(pdf_path, nuevo_pdf_path)
 
     # Enviar correo con el nombre correcto
-    email_result = enviar_correo(factura["correo"], nuevo_pdf_path)
+    enviar_correo(factura["correo"], nuevo_pdf_path)
 
     # Enviar el PDF como respuesta al frontend
     with open(nuevo_pdf_path, "rb") as pdf_file:
