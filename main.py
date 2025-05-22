@@ -87,6 +87,7 @@ def generate_word(data: DocumentData):
         doc = DocxTemplate(WORD_TEMPLATE_PATH)
         context = data.dict()
         context['logo'] = InlineImage(doc, LOGO_PATH, width=Mm(70))
+        context['total'] = 4552.20
         doc.render(context)
         word_output_path = os.path.join(OUTPUT_PATH, 'factura_generada.docx')
         doc.save(word_output_path)
