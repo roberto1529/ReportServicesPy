@@ -179,11 +179,11 @@ async def generate_fact_endpoint(id: int):
         cliente=factura["cliente"],
         direc="Dirección del cliente",
         tell="Teléfono del cliente",
-        id=f"FACT-{factura['id']}",
+        id=f"{factura['id']}",
         fecha=factura["fecha_fact"],
-        subtotal=factura["subtotal"],
-        iva=factura["iva"],
-        total=factura["total"],
+        subtotal=f"{factura["subtotal"]}",
+        iva=f"{factura["iva"]}",
+        total=f"{factura["total"]}",
         productos=[Producto(**item) for item in detalles]
     )
 
