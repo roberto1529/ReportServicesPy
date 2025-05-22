@@ -82,12 +82,12 @@ def convertir_a_pdf(word_path):
         raise HTTPException(status_code=500, detail=f"Error al convertir a PDF: {str(e)}")
 
 # Función para generar el documento Word
-def generate_word(data: DocumentData):
+def generate_word(data: DocumentData, total):
     try:
         doc = DocxTemplate(WORD_TEMPLATE_PATH)
         context = data.dict()
         context['logo'] = InlineImage(doc, LOGO_PATH, width=Mm(70))
-        context['total'] = 4552.20
+        context['total'] = total
         doc.render(context)
         word_output_path = os.path.join(OUTPUT_PATH, 'factura_generada.docx')
         doc.save(word_output_path)
@@ -187,7 +187,7 @@ async def generate_fact_endpoint(id: int):
         productos=[Producto(**item) for item in detalles]
     )
 
-    pdf_path = generate_word(data)
+    pdf_path = generate_word(data, factura["total"])
 
     # Renombrar el PDF al código de factura
     nuevo_pdf_path = os.path.join(OUTPUT_PATH, f"{factura['id']}.pdf")
