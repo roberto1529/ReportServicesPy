@@ -87,7 +87,7 @@ def generate_word(data: DocumentData):
         doc = DocxTemplate(WORD_TEMPLATE_PATH)
         context = data.dict()
         context['logo'] = InlineImage(doc, LOGO_PATH, width=Mm(70))
-        context['total'] = data.total 
+        context['totalc'] = data.total 
         print(data.total)
         
         doc.render(context)
