@@ -191,7 +191,7 @@ async def generate_fact_endpoint(id: int):
 
     print(data)
 
-    pdf_path = generate_word(data, factura["total"])
+    pdf_path = generate_word(data, data["total"])
 
     # Renombrar el PDF al código de factura
     nuevo_pdf_path = os.path.join(OUTPUT_PATH, f"{factura['id']}.pdf")
