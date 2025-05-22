@@ -187,6 +187,8 @@ async def generate_fact_endpoint(id: int):
         productos=[Producto(**item) for item in detalles]
     )
 
+    print(data)
+
     pdf_path = generate_word(data, factura["total"])
 
     # Renombrar el PDF al código de factura
