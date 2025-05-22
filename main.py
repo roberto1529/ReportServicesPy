@@ -107,8 +107,8 @@ async def datos_fact(id: int):
         conn = await connect_db()
 
         query1 = """
-            SELECT LPAD(fm.id::text, 5, '0') AS id, fc.subtotal, fc.iva, fc.total, uc.nombre AS cliente, uc.correo, 
-                TO_CHAR((CURRENT_DATE + fm.fecha_reg)::timestamp, 'YYYY-MM-DD HH24:MI:SS') AS fecha_fact
+            SELECT LPAD(fm.id::text, 5, '0') AS id, fc.subtotal::text , fc.iva::text, fc.total::text, uc.nombre AS cliente, uc.correo, 
+                TO_CHAR((CURRENT_DATE + fm.fecha_reg)::timestamp, 'YYYY-MM-DD') AS fecha_fact
             FROM fact_maestro fm 
             JOIN fact_venta_costo fc ON fc.id_factura = fm.id 
             JOIN usu_cliente uc ON uc.id = fm.id_cliente
@@ -116,11 +116,13 @@ async def datos_fact(id: int):
         """
 
         query2 = """
-            SELECT fi.id_factura, p.descripcion, fi.cantidad, 
-                   CAST(p.venta AS NUMERIC) AS costo_unitario, 
-                   (CAST(p.venta AS NUMERIC) * fi.cantidad) AS costo_total
-            FROM fact_venta_item fi
-            JOIN producto p ON p.id = fi.id_producto
+            SELECT fi.id_factura, 
+                    p.descripcion, 
+                    fi.cantidad, 
+                    ROUND(CAST(p.venta AS NUMERIC), 2)::text AS costo_unitario, 
+                    ROUND(CAST(p.venta AS NUMERIC) * fi.cantidad, 2)::text AS costo_total
+                FROM fact_venta_item fi
+                JOIN producto p ON p.id = fi.id_producto
             WHERE fi.id_factura = $1
         """
 
@@ -179,11 +181,11 @@ async def generate_fact_endpoint(id: int):
         cliente=factura["cliente"],
         direc="Dirección del cliente",
         tell="Teléfono del cliente",
-        id=f"{factura['id']}",
+        id=factura['id'],
         fecha=factura["fecha_fact"],
-        subtotal=f"{factura["subtotal"]}",
-        iva=f"{factura["iva"]}",
-        total=f"{factura["total"]}",
+        subtotal=factura["subtotal"],
+        iva=factura["iva"],
+        total=factura["total"],
         productos=[Producto(**item) for item in detalles]
     )
 
