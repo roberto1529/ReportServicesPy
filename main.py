@@ -85,9 +85,10 @@ def convertir_a_pdf(word_path):
 def generate_word(data: DocumentData):
     try:
         doc = DocxTemplate(WORD_TEMPLATE_PATH)
+        context['total'] = data.total 
         context = data.dict()
         context['logo'] = InlineImage(doc, LOGO_PATH, width=Mm(70))
-        context['total'] = data.total 
+        print(data.total)
         doc.render(context)
         word_output_path = os.path.join(OUTPUT_PATH, 'factura_generada.docx')
         doc.save(word_output_path)
